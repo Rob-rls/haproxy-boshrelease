@@ -270,6 +270,9 @@ global
   <%- if_p("ha_proxy.ssl_ciphersuites") do -%>
     ssl-default-server-ciphersuites <%= p("ha_proxy.ssl_ciphersuites") %>
   <%- end -%>
+  <%- if backend_match_http_protocol && backends.length == 2 -%>
+    set-var proc.h2_alpn_tag str(h2)
+  <%- end -%>
 
 defaults
     log global
@@ -404,6 +407,7 @@ frontend http-in
   <%- if p("ha_proxy.disable_backend_http2_websockets") -%>
     # Send websockets to a backend that forces HTTP/1.1. This avoids bugs in Go & Gorouter's HTTP/2 websocket support
     # https://github.com/cloudfoundry/routing-release/issues/230
+    # Note: first matching backend will be used when there are multiple use_backend directives
     acl is_websocket hdr(Upgrade) -i WebSocket
     acl is_websocket hdr_beg(Host) -i ws
     use_backend http-routers-http1 if is_websocket
@@ -546,9 +550,18 @@ frontend https-in
   <%- if p("ha_proxy.disable_backend_http2_websockets") -%>
     # Send websockets to a backend that forces HTTP/1.1. This avoids bugs in Go & Gorouter's HTTP/2 websocket support
     # https://github.com/cloudfoundry/routing-release/issues/230
+    # Note: first matching backend will be used when there are multiple use_backend directives
     acl is_websocket hdr(Upgrade) -i WebSocket
     acl is_websocket hdr_beg(Host) -i ws
     use_backend http-routers-http1 if is_websocket
+  <%- end -%>
+
+  <%- if backend_match_http_protocol && backends.length == 2 -%>
+    # Ensure that backend protocol matches frontend protocol
+    # Note: first matching backend will be used when there are multiple use_backend directives
+    acl is_http2 ssl_fc_alpn,lower,strcmp(proc.h2_alpn_tag) eq 0
+    use_backend http-routers-http1 if ! is_http2
+    use_backend http-routers-http2 if is_http2
   <%- end -%>
 # }}}
 <% end -%>
@@ -691,6 +704,14 @@ frontend wss-in
     acl is_websocket hdr(Upgrade) -i WebSocket
     acl is_websocket hdr_beg(Host) -i ws
     use_backend http-routers-http1 if is_websocket
+  <%- end -%>
+
+  <%- if backend_match_http_protocol && backends.length == 2 -%>
+    # Ensure that backend protocol matches frontend protocol
+    # Note: first matching backend will be used when there are multiple use_backend directives
+    acl is_http2 ssl_fc_alpn,lower,strcmp(proc.h2_alpn_tag) eq 0
+    use_backend http-routers-http1 if ! is_http2
+    use_backend http-routers-http2 if is_http2
   <%- end -%>
 # }}}
 <% end -%>

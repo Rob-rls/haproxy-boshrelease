@@ -627,6 +627,34 @@ describe 'config/haproxy.config HTTPS frontend' do
     end
   end
 
+  context 'when backend_match_http_protocol is true' do
+    let(:properties) do
+      default_properties.merge({
+        'backend_match_http_protocol' => true,
+        'backend_ssl' => 'verify'
+      })
+    end
+
+    it 'enables config to match the protocol' do
+      expect(frontend_https).to include('acl is_http2 ssl_fc_alpn,lower,strcmp(proc.h2_alpn_tag) eq 0')
+      expect(frontend_https).to include('use_backend http-routers-http1 if ! is_http2')
+      expect(frontend_https).to include('use_backend http-routers-http2 if is_http2')
+    end
+
+    context('when backend_ssl is off') do
+      let(:properties) do
+        default_properties.merge({
+          'backend_match_http_protocol' => true,
+          'backend_ssl' => 'off'
+        })
+      end
+
+      it 'does not override the default backend' do
+        expect(frontend_https).not_to include(/use_backend/)
+      end
+    end
+  end
+
   context 'when no ssl options are provided' do
     let(:properties) { {} }
 
